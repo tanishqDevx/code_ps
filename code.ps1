@@ -26,10 +26,7 @@ try {
 
     while (($i = $s.Read($b, 0, $b.Length)) -ne 0) {
         $d = ([Text.Encoding]::ASCII).GetString($b, 0, $i)
-        
-        # LAB SAFE: simulate command execution
         $r = "Executed safely in lab: $d"
-        
         $r2 = $r + ' PS ' + (pwd).Path + '> '
         $s.Write(([Text.Encoding]::ASCII).GetBytes($r2), 0, $r2.Length)
         $s.Flush()
@@ -37,5 +34,5 @@ try {
 
     $c.Close()
 } catch {
-    Add-Content -Path $logFile -Value ("Connection to $serverIP:$serverPort failed: $_")
+    Add-Content -Path $logFile -Value ("Connection to ${serverIP}:${serverPort} failed: $_")
 }
